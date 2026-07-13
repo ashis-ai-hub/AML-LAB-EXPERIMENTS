@@ -58,44 +58,26 @@
     </button>
 
     <script>
-
-        // These variables remember the last calculated data
-        // so we can send them to the backend when "Visualize" is clicked.
         let graphX = [];
         let graphY = [];
         let m = 0, c = 0, mse = 0, mae = 0, rmse = 0, rSquared = 0;
-
-
-        // ---------------------------------------------
-        // Runs when the "Calculate" button is clicked.
-        // Reads the X and Y numbers, does the math in
-        // JavaScript, and shows the results on screen.
-        // ---------------------------------------------
         function calculateRegression() {
             const xInput = document.getElementById('xValues').value;
             const yInput = document.getElementById('yValues').value;
-
-            // Turn "1 2 3" into a list of real numbers [1, 2, 3]
-            // trim() removes extra spaces at the start/end,
-            // split(/\s+/) breaks the text apart at one or more spaces
             const xTokens = xInput.trim().split(/\s+/);
             const x = [];
             for (let i = 0; i < xTokens.length; i++) {
                 const num = parseFloat(xTokens[i]);
                 if (!isNaN(num)) x.push(num);
             }
-
             const yTokens = yInput.trim().split(/\s+/);
             const y = [];
             for (let i = 0; i < yTokens.length; i++) {
                 const num = parseFloat(yTokens[i]);
                 if (!isNaN(num)) y.push(num);
             }
-
             const resultDiv = document.getElementById('result');
             resultDiv.style.display = 'block';
-
-            // Basic checks so the page doesn't crash on bad input
             if (x.length === 0 || y.length === 0) {
                 resultDiv.innerHTML = "Error: Please enter valid numbers.";
                 return;
@@ -104,44 +86,33 @@
                 resultDiv.innerHTML = `Error: The number of items must match. (X has ${x.length}, Y has ${y.length})`;
                 return;
             }
-
             const n = x.length;
             let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-
             for (let i = 0; i < n; i++) {
                 sumX += x[i];
                 sumY += y[i];
                 sumXY += (x[i] * y[i]);
                 sumXX += (x[i] * x[i]);
             }
-
             const denominator = (n * sumXX - sumX * sumX);
-
             if (denominator === 0) {
                 resultDiv.innerHTML = "Error: Cannot calculate regression (vertical line or identical X values).";
                 return;
             }
-
-            // Slope (m) and intercept (c) using the least-squares formula
             m = (n * sumXY - sumX * sumY) / denominator;
             c = (sumY - m * sumX) / n;
-
-            // Now measure how good the line fits the data
             const meanY = sumY / n;
             let sse = 0, sst = 0, maeSum = 0;
             for (let i = 0; i < n; i++) {
                 const predY = m * x[i] + c;
-                sse += Math.pow(y[i] - predY, 2);   // squared error
-                sst += Math.pow(y[i] - meanY, 2);   // total variation
-                maeSum += Math.abs(y[i] - predY);   // absolute error
+                sse += Math.pow(y[i] - predY, 2);   
+                sst += Math.pow(y[i] - meanY, 2);  
+                maeSum += Math.abs(y[i] - predY);  
             }
-
             mae = maeSum / n;
             mse = sse / n;
             rmse = Math.sqrt(mse);
             rSquared = sst !== 0 ? 1 - (sse / sst) : 1;
-
-            // Show the equation and metrics on the page
             resultDiv.innerHTML = `
                 <hr>
                 <strong>Equation:</strong> Y = ${m.toFixed(4)}X + ${c.toFixed(4)}<br>
@@ -149,20 +120,10 @@
                 <strong>MAE:</strong> ${mae.toFixed(4)} | <strong>MSE:</strong> ${mse.toFixed(4)} | <strong>RMSE:</strong> ${rmse.toFixed(4)}<br>
                 <strong>R² Score:</strong> ${rSquared.toFixed(4)}
             `;
-
-            // Remember the data so the "Visualize Graph" button can use it
             graphX = x;
             graphY = y;
-
             document.getElementById("visualizeBtn").style.display = "inline-block";
         }
-
-
-        // ---------------------------------------------
-        // Runs when "Visualize Graph" is clicked.
-        // Sends the data to the Flask backend, which
-        // draws the two graphs and sends images back.
-        // ---------------------------------------------
         async function visualizeGraph() {
             const response = await fetch("/visualize_regression", {
                 method: "POST",
@@ -180,21 +141,13 @@
                     r2: rSquared
                 })
             });
-
             const data = await response.json();
-
             document.getElementById("plotDiv1").style.display = "block";
             document.getElementById("plotDiv2").style.display = "block";
-
-            // The backend sends back base64 images; put them straight into <img>
             document.getElementById("graphImage").src = data.image1;
             document.getElementById("metricImage").src = data.image2;
             document.getElementById("resetBtn").style.display = "inline-block";
         }
-
-        // ---------------------------------------------
-        // Runs when "Reset" is clicked. Clears everything.
-        // ---------------------------------------------
         function reset() {
             document.getElementById("xValues").value = "";
             document.getElementById("yValues").value = "";
@@ -205,6 +158,5 @@
             document.getElementById("resetBtn").style.display = "none";
         }
     </script>
-
 </body>
 </html>
