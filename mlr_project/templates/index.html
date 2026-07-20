@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiple Linear Regression Calculator</title>
+</head>
+<body>
+
+    <h2>Multiple Linear Regression Calculator</h2>
+
+    <!-- ============ STEP 1: Target Variable (Y) ============ -->
+    <div>
+        <p>Target Variable Name (Y):</p>
+        <input type="text" id="yName" placeholder="e.g., Price">
+    </div>
+
+    <div>
+        <p>Target Variable Values (comma-separated):</p>
+        <input type="text" id="yValues" placeholder="e.g., 100, 150, 200, 250">
+    </div>
+
+    <br>
+
+    <!-- ============ STEP 2: How many features ============ -->
+    <div>
+        <p>How many feature variables (X)?</p>
+        <input type="number" id="numFeatures" placeholder="e.g., 2" min="1">
+        <button onclick="buildFeatureInputs()">Set Features</button>
+    </div>
+
+    <br>
+
+    <!-- Feature name/value input boxes get created here by JavaScript -->
+    <div id="featureInputs"></div>
+
+    <br>
+    <button onclick="calculateRegression()">Calculate</button>
+
+    <div id="result" style="display:none;"></div>
+
+    <br>
+
+    <button id="visualizeBtn" style="display:none;" onclick="visualizeGraph()">
+        Visualize Graph
+    </button>
+
+    <button id="predictBtn" style="display:none;" onclick="showPredictForm()">
+        Enter New Data (Predict)
+    </button>
+
+    <!-- ============ Prediction form (hidden until needed) ============ -->
+    <div id="predictForm" style="display:none;">
+        <h3>Predict New Value</h3>
+        <div id="predictInputs"></div>
+        <button onclick="runPrediction()">Get Prediction</button>
+        <div id="predictResult"></div>
+    </div>
+
+    <br><br>
+
+    <div id="plotsContainer" style="display:flex; flex-wrap:wrap; gap:20px;">
+        <div id="plotDiv1" style="display:none;">
+            <h3>Diagram 1: Actual vs Predicted</h3>
+            <img id="graphImage" style="max-width:500px;width:100%;border:1px solid #ccc;">
+        </div>
+        <div id="plotDiv2" style="display:none;">
+            <h3>Diagram 2: Model Metrics</h3>
+            <img id="metricImage" style="max-width:500px;width:100%;border:1px solid #ccc;">
+        </div>
+    </div>
+
+    <br>
+    <button id="resetBtn" style="display:none;" onclick="reset()">Reset</button>
+
+    <script>
+
+        // Remembers the last entered training data so the
+        // Visualize and Predict buttons can reuse it without
+        // asking the user to type everything again.
+        let trainingData = null;
+        let featureNamesList = [];
+
+
+        // ---------------------------------------------
+        // Runs when "Set Features" is clicked.
+        // Creates one name + values input pair per feature.
+        // ---------------------------------------------
+        function buildFeatureInputs() {
+            const count = parseInt(document.getElementById("numFeatures").value);
+            const container = document.getElementById("featureInputs");
+            container.innerHTML = "";   // clear old inputs first
+
+            if (!count || count < 1) {
+                alert("Please enter a valid number of features.");
+                return;
+            }
+
+            for (let i = 0; i < count; i++) {
+                const block = document.createElement("div");
+                block.innerHTML = `
+                    <p><strong>Feature ${i + 1}</strong></p>
+                    <p>Feature Name:</p>
+                    <input type="text" class="featureName" placeholder="e.g., Area">
+                    <p>Feature Values (comma-separated):</p>
+                    <input type="text" class="featureValues" placeholder="e.g., 500, 600, 750, 800">
+                    <br><br>
+                `;
+                container.appendChild(block);
+            }
+        }
+
+
+        // ---------------------------------------------
+        // Reads everything the user typed and packages it
+        // into one simple object used by every backend call.
+        // ---------------------------------------------
+        function collectTrainingData() {
+            const yName = document.getElementById("yName").value.trim();
+            const yValues = document.getElementById("yValues").value
+                .split(",")
+                .map(v => parseFloat(v.trim()))
+                .filter(v => !isNaN(v));
+
+            const nameInputs = document.querySelectorAll(".featureName");
+            const valueInputs = document.querySelectorAll(".featureValues");
+
+            const features = [];
+            const names = [];
+
+            for (let i = 0; i < nameInputs.length; i++) {
+                const name = nameInputs[i].value.trim();
+                const values = valueInputs[i].value
+                    .split(",")
+                    .map(v => parseFloat(v.trim()))
+                    .filter(v => !isNaN(v));
+
+                features.push({ name: name, values: values });
+                names.push(name);
+            }
+
+            featureNamesList = names;
+
+            return {
+                y_name: yName,
+                y_values: yValues,
+                features: features
+            };
+        }
+
+
+        // ---------------------------------------------
+        // Runs when "Calculate" is clicked. Sends the data
+        // to Flask, which trains the model and returns the
+        // equation and metrics.
+        // ---------------------------------------------
+        async function calculateRegression() {
+            const data = collectTrainingData();
+
+            if (data.y_values.length === 0 || data.features.length === 0) {
+                alert("Please fill in the target values and at least one feature.");
+                return;
+            }
+
+            trainingData = data;   // remember it for later buttons
+
+            try {
+                const response = await fetch("/calculate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                // If the backend sent an error, show it clearly instead
+                // of leaving the page blank with no explanation.
+                if (!response.ok) {
+                    document.getElementById("result").style.display = "block";
+                    document.getElementById("result").innerHTML =
+                        "<p style='color:red;'><strong>Error:</strong> " + result.error + "</p>";
+                    return;
+                }
+
+                let slopesHtml = "";
+                for (let i = 0; i < result.slopes.length; i++) {
+                    slopesHtml += "<strong>Slope for " + result.slopes[i].name + ":</strong> "
+                                + result.slopes[i].value + "<br>";
+                }
+
+                document.getElementById("result").style.display = "block";
+                document.getElementById("result").innerHTML = `
+                    <hr>
+                    <strong>Equation:</strong> ${result.equation}<br>
+                    <strong>Intercept:</strong> ${result.intercept}<br>
+                    ${slopesHtml}
+                    <strong>MAE:</strong> ${result.mae} |
+                    <strong>MSE:</strong> ${result.mse} |
+                    <strong>RMSE:</strong> ${result.rmse}<br>
+                    <strong>R² Score:</strong> ${result.r2}
+                `;
+
+                document.getElementById("visualizeBtn").style.display = "inline-block";
+                document.getElementById("predictBtn").style.display = "inline-block";
+                document.getElementById("resetBtn").style.display = "inline-block";
+
+            } catch (err) {
+                // This catches network-level failures (e.g. server not
+                // running, wrong URL) so you always see SOMETHING.
+                document.getElementById("result").style.display = "block";
+                document.getElementById("result").innerHTML =
+                    "<p style='color:red;'><strong>Could not reach the server:</strong> " + err.message + "</p>";
+            }
+        }
+
+
+        // ---------------------------------------------
+        // Runs when "Visualize Graph" is clicked.
+        // ---------------------------------------------
+        async function visualizeGraph() {
+            try {
+                const response = await fetch("/visualize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(trainingData)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert("Error creating graphs: " + data.error);
+                    return;
+                }
+
+                document.getElementById("plotDiv1").style.display = "block";
+                document.getElementById("plotDiv2").style.display = "block";
+                document.getElementById("graphImage").src = data.image1;
+                document.getElementById("metricImage").src = data.image2;
+
+            } catch (err) {
+                alert("Could not reach the server: " + err.message);
+            }
+        }
+
+
+        // ---------------------------------------------
+        // Runs when "Enter New Data (Predict)" is clicked.
+        // Builds one input box per feature.
+        // ---------------------------------------------
+        function showPredictForm() {
+            const container = document.getElementById("predictInputs");
+            container.innerHTML = "";
+
+            for (let i = 0; i < featureNamesList.length; i++) {
+                const label = document.createElement("p");
+                label.textContent = featureNamesList[i] + ":";
+
+                const input = document.createElement("input");
+                input.type = "text";
+                input.className = "predictValue";
+
+                container.appendChild(label);
+                container.appendChild(input);
+            }
+
+            document.getElementById("predictForm").style.display = "block";
+            document.getElementById("predictResult").innerHTML = "";
+        }
+
+
+        // ---------------------------------------------
+        // Runs when "Get Prediction" is clicked.
+        // ---------------------------------------------
+        async function runPrediction() {
+            const inputs = document.querySelectorAll(".predictValue");
+            const newValues = [];
+
+            for (let i = 0; i < inputs.length; i++) {
+                newValues.push(parseFloat(inputs[i].value));
+            }
+
+            const payload = Object.assign({}, trainingData, { new_values: newValues });
+
+            try {
+                const response = await fetch("/predict", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    document.getElementById("predictResult").innerHTML =
+                        "<p style='color:red;'><strong>Error:</strong> " + data.error + "</p>";
+                    return;
+                }
+
+                document.getElementById("predictResult").innerHTML =
+                    "<strong>Predicted " + trainingData.y_name + ":</strong> " + data.prediction;
+
+            } catch (err) {
+                document.getElementById("predictResult").innerHTML =
+                    "<p style='color:red;'><strong>Could not reach the server:</strong> " + err.message + "</p>";
+            }
+        }
+
+
+        // ---------------------------------------------
+        // Runs when "Reset" is clicked. Clears everything.
+        // ---------------------------------------------
+        function reset() {
+            document.getElementById("yName").value = "";
+            document.getElementById("yValues").value = "";
+            document.getElementById("numFeatures").value = "";
+            document.getElementById("featureInputs").innerHTML = "";
+            document.getElementById("result").style.display = "none";
+            document.getElementById("plotDiv1").style.display = "none";
+            document.getElementById("plotDiv2").style.display = "none";
+            document.getElementById("visualizeBtn").style.display = "none";
+            document.getElementById("predictBtn").style.display = "none";
+            document.getElementById("predictForm").style.display = "none";
+            document.getElementById("resetBtn").style.display = "none";
+            trainingData = null;
+            featureNamesList = [];
+        }
+    </script>
+
+</body>
+</html>
